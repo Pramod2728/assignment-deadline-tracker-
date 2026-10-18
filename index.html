@@ -1,0 +1,257 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assignment Deadline Tracker</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f3f6fc;color:#18243b}
+header{background:#172554;color:white;padding:24px 6%}
+header h1{margin:0 0 8px;font-size:27px}
+header p{margin:0;color:#cbd5e1}
+main{max-width:1100px;margin:28px auto;padding:0 18px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.card,.panel{background:white;padding:20px;border-radius:14px;box-shadow:0 3px 15px #1e293b0b}
+.card p{margin:0;color:#64748b;font-size:14px}
+.card h2{margin:12px 0 0;font-size:30px}
+.panel{margin-top:22px}
+h2{font-size:20px}
+form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+label{font-size:13px;font-weight:bold;display:block;margin-bottom:6px}
+input,select,textarea{width:100%;padding:11px;border:1px solid #dbe2ef;border-radius:8px;font:inherit;background:white}
+textarea{resize:vertical}
+button{border:0;border-radius:8px;padding:11px 15px;background:#2563eb;color:white;cursor:pointer;font-weight:bold}
+button:hover{opacity:.88}
+.full{grid-column:1/-1}
+.filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:15px}
+.filters input{flex:1;min-width:180px}
+.filters select{width:auto;min-width:140px}
+.assignment{border:1px solid #e2e8f0;border-radius:10px;padding:15px;margin:10px 0;display:flex;gap:14px;justify-content:space-between;align-items:center}
+.assignment h3{margin:0 0 8px}
+.assignment p{margin:5px 0;color:#64748b;font-size:14px}
+.actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.small{padding:8px 10px;font-size:12px}
+.danger{background:#dc2626}
+.secondary{background:#475569}
+.status{display:inline-block;background:#dbeafe;color:#1d4ed8;padding:5px 8px;border-radius:20px;font-size:12px}
+.overdue{color:#dc2626!important;font-weight:bold}
+.empty{text-align:center;padding:28px;color:#64748b}
+@media(max-width:650px){.stats{grid-template-columns:repeat(2,1fr)}form{grid-template-columns:1fr}.full{grid-column:auto}.assignment{align-items:flex-start;flex-direction:column}.actions{justify-content:flex-start}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Assignment Deadline Tracker</h1>
+  <p>Plan your work. Track your deadlines. Stay ahead.</p>
+</header>
+<main>
+  <section class="stats">
+    <div class="card"><p>Total Assignments</p><h2 id="total">0</h2></div>
+    <div class="card"><p>Pending</p><h2 id="pending">0</h2></div>
+    <div class="card"><p>Completed</p><h2 id="completed">0</h2></div>
+    <div class="card"><p>Overdue</p><h2 id="overdue">0</h2></div>
+  </section>
+
+  <section class="panel">
+    <h2 id="formTitle">Add New Assignment</h2>
+    <form id="assignmentForm">
+      <div>
+        <label for="title">Assignment Title *</label>
+        <input id="title" required maxlength="100" placeholder="e.g. SRS Document">
+      </div>
+      <div>
+        <label for="subject">Subject *</label>
+        <input id="subject" required maxlength="80" placeholder="e.g. Software Engineering">
+      </div>
+      <div>
+        <label for="dueDate">Submission Deadline *</label>
+        <input id="dueDate" type="date" required>
+      </div>
+      <div>
+        <label for="priority">Priority</label>
+        <select id="priority">
+          <option>Medium</option><option>High</option><option>Low</option>
+        </select>
+      </div>
+      <div>
+        <label for="status">Status</label>
+        <select id="status">
+          <option>Pending</option><option>In Progress</option><option>Completed</option>
+        </select>
+      </div>
+      <div>
+        <label for="description">Description (optional)</label>
+        <input id="description" maxlength="250" placeholder="Assignment details">
+      </div>
+      <button class="full" type="submit" id="saveButton">Add Assignment</button>
+      <button class="full secondary" type="button" id="cancelEdit" hidden>Cancel Edit</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>My Assignments</h2>
+    <div class="filters">
+      <input id="search" placeholder="Search by title or subject...">
+      <select id="filter">
+        <option value="All">All Assignments</option>
+        <option>Pending</option>
+        <option>In Progress</option>
+        <option>Completed</option>
+        <option value="Overdue">Overdue</option>
+      </select>
+      <select id="sort">
+        <option value="date">Sort by deadline</option>
+        <option value="priority">Sort by priority</option>
+      </select>
+    </div>
+    <div id="assignmentList"></div>
+  </section>
+  <p style="text-align:center;color:#64748b;font-size:12px;margin:22px 0">
+    Assignment Deadline Tracker | Software Engineering Mini-Project
+  </p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const KEY = "assignmentDeadlineTracker_v1";
+let assignments = [];
+let editingId = null;
+
+try {
+  const stored = JSON.parse(localStorage.getItem(KEY) || "[]");
+  if (Array.isArray(stored)) assignments = stored;
+} catch (e) {
+  assignments = [];
+}
+
+const today = () => {
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  return d;
+};
+const isOverdue = a =>
+  a.status !== "Completed" && new Date(a.dueDate + "T00:00:00") < today();
+
+function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(assignments));
+  } catch (e) {
+    alert("Could not save data in this browser.");
+  }
+  render();
+}
+function safe(text) {
+  return String(text ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+function resetForm() {
+  editingId = null;
+  $("assignmentForm").reset();
+  $("formTitle").textContent = "Add New Assignment";
+  $("saveButton").textContent = "Add Assignment";
+  $("cancelEdit").hidden = true;
+}
+$("assignmentForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const item = {
+    title: $("title").value.trim(),
+    subject: $("subject").value.trim(),
+    dueDate: $("dueDate").value,
+    priority: $("priority").value,
+    status: $("status").value,
+    description: $("description").value.trim()
+  };
+  if (!item.title || !item.subject || !item.dueDate) return;
+  if (editingId !== null) {
+    assignments = assignments.map(a => a.id === editingId ? {...a,...item} : a);
+  } else {
+    assignments.push({...item,id:Date.now().toString()+Math.random().toString(16).slice(2)});
+  }
+  resetForm();
+  save();
+});
+$("cancelEdit").addEventListener("click", resetForm);
+$("search").addEventListener("input", render);
+$("filter").addEventListener("change", render);
+$("sort").addEventListener("change", render);
+
+function editAssignment(id) {
+  const a = assignments.find(x => x.id === id);
+  if (!a) return;
+  editingId = id;
+  ["title","subject","dueDate","priority","status","description"].forEach(k => $(k).value = a[k] || "");
+  $("formTitle").textContent = "Edit Assignment";
+  $("saveButton").textContent = "Save Changes";
+  $("cancelEdit").hidden = false;
+  $("assignmentForm").scrollIntoView({behavior:"smooth"});
+}
+function deleteAssignment(id) {
+  if (!confirm("Delete this assignment?")) return;
+  assignments = assignments.filter(a => a.id !== id);
+  save();
+}
+function completeAssignment(id) {
+  assignments = assignments.map(a => a.id === id ? {...a,status:"Completed"} : a);
+  save();
+}
+function render() {
+  $("total").textContent = assignments.length;
+  $("pending").textContent = assignments.filter(a => a.status !== "Completed").length;
+  $("completed").textContent = assignments.filter(a => a.status === "Completed").length;
+  $("overdue").textContent = assignments.filter(isOverdue).length;
+
+  const query = $("search").value.toLowerCase().trim();
+  const filter = $("filter").value;
+  let list = assignments.filter(a => {
+    const matches = (a.title+" "+a.subject+" "+a.description).toLowerCase().includes(query);
+    const statusMatch = filter === "All" ||
+      (filter === "Overdue" ? isOverdue(a) : a.status === filter);
+    return matches && statusMatch;
+  });
+  const rank = {High:0,Medium:1,Low:2};
+  list.sort((a,b) => $("sort").value === "priority"
+    ? rank[a.priority]-rank[b.priority]
+    : a.dueDate.localeCompare(b.dueDate));
+
+  if (!list.length) {
+    $("assignmentList").innerHTML = '<div class="empty">No assignments found. Add your first assignment above!</div>';
+    return;
+  }
+  $("assignmentList").innerHTML = list.map(a => {
+    const late = isOverdue(a);
+    const due = new Date(a.dueDate+"T00:00:00");
+    const days = Math.round((due-today())/86400000);
+    let remaining = a.status === "Completed" ? "Completed" :
+      late ? "Overdue by "+Math.abs(days)+" day(s)" :
+      days === 0 ? "Due today" : days+" day(s) remaining";
+    return `<article class="assignment">
+      <div>
+        <h3>${safe(a.title)}</h3>
+        <p><strong>Subject:</strong> ${safe(a.subject)}</p>
+        <p><strong>Deadline:</strong> ${safe(a.dueDate)}</p>
+        <p><strong>Priority:</strong> ${safe(a.priority)} &nbsp; <span class="status">${safe(a.status)}</span></p>
+        <p class="${late?"overdue":""}">${safe(remaining)}</p>
+        ${a.description ? `<p>${safe(a.description)}</p>` : ""}
+      </div>
+      <div class="actions">
+        ${a.status !== "Completed" ? `<button class="small" data-action="complete" data-id="${safe(a.id)}">Complete</button>` : ""}
+        <button class="small secondary" data-action="edit" data-id="${safe(a.id)}">Edit</button>
+        <button class="small danger" data-action="delete" data-id="${safe(a.id)}">Delete</button>
+      </div>
+    </article>`;
+  }).join("");
+}
+$("assignmentList").addEventListener("click", e => {
+  const button = e.target.closest("button[data-action]");
+  if (!button) return;
+  const id = button.dataset.id;
+  if (button.dataset.action === "complete") completeAssignment(id);
+  if (button.dataset.action === "edit") editAssignment(id);
+  if (button.dataset.action === "delete") deleteAssignment(id);
+});
+render();
+</script>
+</body>
+</html>
